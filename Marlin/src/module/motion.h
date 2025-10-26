@@ -62,7 +62,9 @@ extern xyz_pos_t cartes;
   extern abce_pos_t delta;
 #endif
 
-#if HAS_ABL_NOT_UBL
+// Determine XY_PROBE_FEEDRATE_MM_S - The feedrate used between Probe Points
+#if ABL_USES_GRID
+  // ABL LINEAR and BILINEAR use 'G29 S' value, or MMM_TO_MMS(XY_PROBE_FEEDRATE)
   extern feedRate_t xy_probe_feedrate_mm_s;
   #define XY_PROBE_FEEDRATE_MM_S xy_probe_feedrate_mm_s
 #elif defined(XY_PROBE_FEEDRATE)
@@ -578,9 +580,9 @@ void home_if_needed(const bool keeplev=false);
 #else
 
   // Return true if the given position is within the machine bounds.
-  bool position_is_reachable(TERN_(HAS_X_AXIS, const float rx) OPTARG(HAS_Y_AXIS, const float ry));
+  bool position_is_reachable(XY_LIST(const float rx, const float ry));
   inline bool position_is_reachable(const xy_pos_t &pos) {
-    return position_is_reachable(TERN_(HAS_X_AXIS, pos.x) OPTARG(HAS_Y_AXIS, pos.y));
+    return position_is_reachable(XY_LIST(pos.x, pos.y));
   }
 
 #endif

@@ -57,7 +57,7 @@
  *   di -> (2 a d - s1^2 + s2^2)/(4 a)
  *
  * We note, as an optimization, that if we have already calculated an
- * acceleration distance d1 from s1 to m and a deceration distance d2
+ * acceleration distance d1 from s1 to m and a deceleration distance d2
  * from m to s2 then
  *
  *   d1 -> (m^2 - s1^2) / (2 a)
@@ -1371,7 +1371,6 @@ void Planner::check_axes_activity() {
 
   /**
    * Called by the M104/M109 commands after setting Hotend Temperature
-   *
    */
   void Planner::autotemp_M104_M109() {
     _autotemp_update_from_hotend();
@@ -2416,9 +2415,10 @@ bool Planner::_populate_block(
        *               Check the appropriate K value for Standard or Fixed-Time Motion.
        */
       if (esteps && dm.e) {
-        const bool ftm_active = TERN0(FTM_HAS_LIN_ADVANCE, ftMotion.cfg.active);
+        const bool ftm_active = TERN0(FTM_HAS_LIN_ADVANCE, ftMotion.cfg.active),
+                   ftm_la_active = TERN0(FTM_HAS_LIN_ADVANCE, ftm_active && ftMotion.cfg.linearAdvEna);
         const float advK = ftm_active
-          ? TERN0(FTM_HAS_LIN_ADVANCE, ftMotion.cfg.linearAdvK)
+          ? (ftm_la_active ? TERN0(FTM_HAS_LIN_ADVANCE, ftMotion.cfg.linearAdvK) : 0)
           : TERN0(HAS_ROUGH_LIN_ADVANCE, extruder_advance_K[E_INDEX_N(extruder)]);
         if (advK) {
           float e_D_ratio = (target_float.e - position_float.e) /
@@ -2438,13 +2438,10 @@ bool Planner::_populate_block(
             const uint32_t max_accel_steps_per_s2 = (MAX_E_JERK(extruder) / (advK * e_D_ratio)) * steps_per_mm;
             if (accel > max_accel_steps_per_s2) {
               accel = max_accel_steps_per_s2;
-              if (TERN0(LA_DEBUG, DEBUGGING(INFO))) SERIAL_ECHOLNPGM("Acceleration limited.");
+              if (TERN0(LA_DEBUG, DEBUGGING(INFO))) SERIAL_ECHOLNPGM("Acceleration limited to max_accel_steps_per_s2 (", max_accel_steps_per_s2, ")");
             }
           }
         }
-        #if ANY(SMOOTH_LIN_ADVANCE, FTM_HAS_LIN_ADVANCE)
-          block->use_advance_lead = use_adv_lead;
-        #endif
       }
     #endif // LIN_ADVANCE || FTM_HAS_LIN_ADVANCE
 
@@ -2496,6 +2493,10 @@ bool Planner::_populate_block(
       const uint32_t xy_steps = TERN0(INPUT_SHAPING_X, block->steps.x) + TERN0(INPUT_SHAPING_Y, block->steps.y);
       block->xy_length_inv_q30 = xy_steps ? (_BV32(30) / xy_steps) : 0;
     #endif
+  #endif
+
+  #if ANY(SMOOTH_LIN_ADVANCE, FTM_HAS_LIN_ADVANCE)
+    block->use_advance_lead = use_adv_lead;
   #endif
 
   // Formula for the average speed over a 1 step worth of distance if starting from zero and
@@ -3065,11 +3066,11 @@ bool Planner::buffer_line(const xyze_pos_t &cart, const feedRate_t fr_mm_s
       feedRate_t calculated_feedrate = fr_mm_s;
       const xyz_pos_t diff = delta - position_float;
       if (!NEAR_ZERO(diff.b)) {
-        if (delta.a <= POLAR_FAST_RADIUS )
+        if (delta.a <= POLAR_FAST_RADIUS)
           calculated_feedrate = settings.max_feedrate_mm_s[Y_AXIS];
         else {
           // Normalized vector of movement
-          const float diffBLength = ABS((2.0f * M_PI * diff.a) * (diff.b / 360.0f)),
+          const float diffBLength = ABS((2.0f * M_PI * diff.a) * (diff.b * 0.002777777778)), // ÷ 360
                       diffTheta = DEGREES(ATAN2(diff.a, diffBLength)),
                       normalizedTheta = 1.0f - (ABS(diffTheta > 90.0f ? 180.0f - diffTheta : diffTheta) / 90.0f);
 
